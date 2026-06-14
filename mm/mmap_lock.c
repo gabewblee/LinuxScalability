@@ -299,6 +299,14 @@ struct vm_area_struct *lock_vma_under_rcu(struct mm_struct *mm,
 	MA_STATE(mas, &mm->mm_mt, address, address);
 	struct vm_area_struct *vma;
 
+	/*
+	 * The VMA tree may only be traversed locklessly while it is in RCU
+	 * mode.  A single-threaded address space keeps it in non-RCU mode (its
+	 * nodes may be modified in place), so fall back to the mmap_lock path.
+	 */
+	if (!mt_in_rcu(&mm->mm_mt))
+		return NULL;
+
 retry:
 	rcu_read_lock();
 	vma = mas_walk(&mas);
@@ -375,6 +383,20 @@ struct vm_area_struct *lock_next_vma(struct mm_struct *mm,
 	bool mmap_unlocked;
 
 	RCU_LOCKDEP_WARN(!rcu_read_lock_held(), "no rcu read lock held");
+
+	/*
+	 * Lockless traversal is only safe while the tree is in RCU mode.  For a
+	 * non-RCU (single-threaded) address space, drop into the mmap_lock path
+	 * directly, keeping rcu_read_lock held on return as callers expect.
+	 */
+	if (!mt_in_rcu(&mm->mm_mt)) {
+		rcu_read_unlock();
+		vma = lock_next_vma_under_mmap_lock(mm, vmi, from_addr);
+		rcu_read_lock();
+		/* Reinitialize the iterator after re-entering rcu read section */
+		vma_iter_set(vmi, IS_ERR_OR_NULL(vma) ? from_addr : vma->vm_end);
+		return vma;
+	}
 retry:
 	/* Start mmap_lock speculation in case we need to verify the vma later */
 	mmap_unlocked = mmap_lock_speculate_try_begin(mm, &mm_wr_seq);

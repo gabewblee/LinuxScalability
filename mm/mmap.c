@@ -1849,7 +1849,12 @@ __latent_entropy int dup_mmap(struct mm_struct *mm, struct mm_struct *oldmm)
 loop_out:
 	vma_iter_free(&vmi);
 	if (!retval) {
-		mt_set_in_rcu(vmi.mas.tree);
+		/*
+		 * The child starts out single-threaded, so leave its VMA tree
+		 * in non-RCU mode (it was cleared above for the bulk build).
+		 * copy_mm() switches it to RCU mode if/when the new address
+		 * space becomes multi-threaded.  See MM_MT_FLAGS.
+		 */
 		ksm_fork(mm, oldmm);
 		khugepaged_fork(mm, oldmm);
 	} else {

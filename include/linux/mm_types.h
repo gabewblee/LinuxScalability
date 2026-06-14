@@ -1463,8 +1463,22 @@ static inline void __mm_flags_set_mask_bits_word(struct mm_struct *mm,
 	set_mask_bits(bitmap, mask, bits);
 }
 
-#define MM_MT_FLAGS	(MT_FLAGS_ALLOC_RANGE | MT_FLAGS_LOCK_EXTERN | \
-			 MT_FLAGS_USE_RCU)
+/*
+ * The VMA maple tree starts in non-RCU mode.  As long as an address space is
+ * single-threaded, all of its readers acquire mmap_lock (read or write) and so
+ * are serialised against writers; keeping the tree out of RCU mode lets stores
+ * modify nodes in place instead of copying-and-RCU-freeing them, which makes
+ * mmap()/munmap()/fork() noticeably cheaper.
+ *
+ * The only readers that traverse the tree without mmap_lock are the per-VMA
+ * lock fault paths (lock_vma_under_rcu()/lock_next_vma()).  Those bail out to
+ * the mmap_lock path while the tree is in non-RCU mode, and the tree is
+ * switched to RCU mode (mt_set_in_rcu()) the first time the address space
+ * becomes genuinely multi-threaded (see copy_mm()).  This keeps the per-VMA
+ * lock scalability for threaded workloads while giving single-threaded
+ * processes the cheaper non-RCU stores.
+ */
+#define MM_MT_FLAGS	(MT_FLAGS_ALLOC_RANGE | MT_FLAGS_LOCK_EXTERN)
 extern struct mm_struct init_mm;
 
 #define MM_STRUCT_FLEXIBLE_ARRAY_INIT				\

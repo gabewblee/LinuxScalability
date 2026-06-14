@@ -1580,6 +1580,23 @@ static int copy_mm(u64 clone_flags, struct task_struct *tsk)
 		return 0;
 
 	if (clone_flags & CLONE_VM) {
+		/*
+		 * A new task is about to share this address space.  If this
+		 * makes it genuinely multi-threaded (i.e. not a transient
+		 * vfork() sharing, where the parent is suspended), switch the
+		 * VMA tree to RCU mode so the per-VMA lock fault paths may
+		 * traverse it locklessly again.  This is a one-way transition
+		 * performed under mmap_lock so it is serialised against tree
+		 * writers; subsequent thread creations observe RCU mode and
+		 * skip the lock.  See MM_MT_FLAGS.
+		 */
+		if (IS_ENABLED(CONFIG_PER_VMA_LOCK) &&
+		    !(clone_flags & CLONE_VFORK) &&
+		    !mt_in_rcu(&oldmm->mm_mt)) {
+			mmap_write_lock(oldmm);
+			mt_set_in_rcu(&oldmm->mm_mt);
+			mmap_write_unlock(oldmm);
+		}
 		mmget(oldmm);
 		mm = oldmm;
 	} else {
