@@ -14,7 +14,7 @@ import numpy as np
 
 RESULTS_DIRECTORY_PATH = "results"
 PLOTS_DIRECTORY_PATH = "plots"
-BASELINE_KERNEL_VERSION = os.environ.get("BASELINE_VERSION", "4.0")
+BASELINE_KERNEL_VERSION = os.environ.get("BASELINE_VERSION", "5.0")
 ARCHITECTURE_NAME_ALIASES = {
     "x86_64"     : "amd64",
     "amd64"      : "amd64",
@@ -129,7 +129,7 @@ def load_benchmark_results() -> pd.DataFrame:
     )
     if not csv_file_paths:
         print(f"[plot] No result CSV files found in '{RESULTS_DIRECTORY_PATH}/'.")
-        print("[plot] Run 'make run-all' first.")
+        print("[plot] Run 'make run' or 'make patched' first.")
         sys.exit(1)
 
     rows = []
@@ -150,6 +150,10 @@ def load_benchmark_results() -> pd.DataFrame:
             })
 
     frame = pd.DataFrame(rows)
+    if frame.empty:
+        print(f"[plot] No benchmark rows found in '{RESULTS_DIRECTORY_PATH}/'.")
+        sys.exit(1)
+
     print(f"[plot] Loaded {len(csv_file_paths)} result file(s): "
           f"{[os.path.basename(path) for path in csv_file_paths]}")
     return frame
@@ -272,7 +276,7 @@ def make_percentage_heatmap(frame: pd.DataFrame) -> None:
         figure.tight_layout(pad=0.4)
         destination = os.path.join(
             PLOTS_DIRECTORY_PATH,
-            f"percentage_change_{architecture}.png",
+            f"heatmap_{architecture}.png",
         )
         figure.savefig(destination, dpi=200, bbox_inches="tight")
         plt.close(figure)

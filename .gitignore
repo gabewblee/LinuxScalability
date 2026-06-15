@@ -1,5 +1,7 @@
 __pycache__/
+.deps/
 .venv/
+docker-run.log
 build/
 kernels/
 logs/
